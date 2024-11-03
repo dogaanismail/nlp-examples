@@ -211,3 +211,23 @@ print(common_words)
 # Unique words
 unique_words = [word for (word, freq) in word_freq.items() if freq == 1]
 print(unique_words)
+
+# %% What the same count would look like with stop words included
+
+words_all = [token.text for token in complete_doc if not token.is_punct]
+print(
+    Counter(
+        [token.text for token in complete_doc if not token.is_punct]
+    ).most_common(5)
+)
+
+# %% Part-of-speech tagging
+
+for token in about_doc[:5]:
+    print(
+        f"""
+        TOKEN: {str(token)}
+        =====
+        TAG: {str(token.tag_):10} POS: {token.pos_}
+        EXPLANATION: {spacy.explain(token.tag_)}"""
+    )
