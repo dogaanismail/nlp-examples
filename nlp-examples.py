@@ -1,7 +1,10 @@
 import pathlib
 import spacy
+import textacy
 from spacy import Language
+from spacy import displacy
 from collections import Counter
+from spacy.matcher import Matcher
 from spacy.tokenizer import Tokenizer
 
 # Ensure the model is installed
@@ -231,3 +234,277 @@ for token in about_doc[:5]:
         TAG: {str(token.tag_):10} POS: {token.pos_}
         EXPLANATION: {spacy.explain(token.tag_)}"""
     )
+
+# %% Categorizing words based on their POS
+
+part_of_speech_text = (
+    "Gus Proto is a Python developer currently"
+    " working for a London-based Fintech company. He is"
+    " interested in learning Natural Language Processing."
+    " There is a developer conference happening on 21 July"
+    ' 2019 in London. It is titled "Applications of Natural'
+    ' Language Processing". There is a helpline number'
+    " available at +44-1234567891. Gus is helping organize it."
+    " He keeps organizing local Python meetups and several"
+    " internal talks at his workplace. Gus is also presenting"
+    ' a talk. The talk will introduce the reader about "Use'
+    ' cases of Natural Language Processing in Fintech".'
+    " Apart from his work, he is very passionate about music."
+    " Gus is learning to play the Piano. He has enrolled"
+    " himself in the weekend batch of Great Piano Academy."
+    " Great Piano Academy is situated in Mayfair or the City"
+    " of London and has world-class piano instructors."
+)
+
+part_of_speech_doc = nlp(part_of_speech_text)
+
+nouns = []
+adjectives = []
+verbs = []
+determiners = []
+adverbs = []
+prepositions = []
+conjunctions = []
+interjections = []
+for token in part_of_speech_doc:
+
+    if token.pos_ == "ADJ":
+        adjectives.append(token)
+
+    elif token.pos_ == "NOUN":
+        nouns.append(token)
+
+    elif token.pos_ == "VERB":
+        verbs.append(token)
+
+    elif token.pos_ == "DET":
+        determiners.append(token)
+
+    elif token.pos_ == "ADV":
+        adverbs.append(token)
+
+    elif token.pos_ == "PREP":
+        prepositions.append(token)
+
+    elif token.pos_ == "CONJ":
+        conjunctions.append(token)
+
+    elif token.pos_ == "INTERJ":
+        interjections.append(token)
+
+print(f"{nouns = }")
+print(f"{adjectives = }")
+print(f"{verbs = }")
+print(f"{determiners = }")
+print(f"{adverbs = }")
+print(f"{prepositions = }")
+print(f"{conjunctions = }")
+print(f"{interjections = }")
+
+# %% Preprocessing functions
+
+def is_token_allowed(token):
+    """
+    Only allow valid tokens which are not stop words
+    and punctuation symbols.
+    """
+    return bool(
+        token
+        and str(token).strip()
+        and not token.is_stop
+        and not token.is_punct
+    )
+
+
+def preprocess_token(token):
+    # Reduce token to its lowercase lemma form
+    return token.lemma_.strip().lower()
+
+
+complete_filtered_tokens = [
+    preprocess_token(token)
+    for token in complete_doc
+    if is_token_allowed(token)
+]
+
+print(complete_filtered_tokens)
+
+# %% Rule-based matching
+
+matcher = Matcher(nlp.vocab)
+
+def extract_full_name(nlp_doc):
+    pattern = [{"POS": "PROPN"}, {"POS": "PROPN"}]
+    matcher.add("FULL_NAME", patterns=[pattern])
+    matches = matcher(nlp_doc)
+    for _, start, end in matches:
+        span = nlp_doc[start:end]
+        return span.text
+
+print(extract_full_name(about_doc))
+
+# %% Extracting phone numbers from text with patterns
+
+matcher = Matcher(nlp.vocab)
+conference_org_text = (
+    "There is a developer conference"
+    " happening on 21 July 2019 in London. It is titled"
+    ' "Applications of Natural Language Processing".'
+    " There is a helpline number available"
+    " at (123) 456-7891"
+)
+
+def extract_phone_number(nlp_doc):
+    pattern = [
+        {"ORTH": "("},
+        {"SHAPE": "ddd"},
+        {"ORTH": ")"},
+        {"SHAPE": "ddd"},
+        {"ORTH": "-", "OP": "?"},
+        {"SHAPE": "ddd"},
+    ]
+    matcher.add("PHONE_NUMBER", patterns=[pattern])
+    matches = matcher(nlp_doc)
+    for _, start, end in matches:
+        span = nlp_doc[start:end]
+        return span.text
+
+conference_org_doc = nlp(conference_org_text)
+print(extract_phone_number(conference_org_doc))
+
+# %% Using displaCy to visualize text structure
+
+# Windows server needs to be manually changed to 127.0.0.1
+
+about_interest_text = (
+    "He is interested in learning Natural Language Processing."
+)
+about_interest_doc = nlp(about_interest_text)
+displacy.serve(about_interest_doc, style="dep", auto_select_port=True)
+
+# %% Dependency parsing
+
+piano_text = "Gus is learning piano"
+piano_doc = nlp(piano_text)
+for token in piano_doc:
+    print(
+        f"""
+TOKEN: {token.text}
+=====
+{token.tag_ = }
+{token.head.text = }
+{token.dep_ = }"""
+    )
+
+displacy.serve(piano_doc, style="dep", auto_select_port=True)
+
+# %% Navigating the parsed tree and subtree
+
+one_line_about_text = (
+    "Gus Proto is a Python developer"
+    " currently working for a London-based Fintech company"
+)
+one_line_about_doc = nlp(one_line_about_text)
+
+# %% Extract children of `developer`
+print([token.text for token in one_line_about_doc[5].children])
+
+# %% Extract previous neighboring node of `developer`
+print(one_line_about_doc[5].nbor(-1))
+
+# %% Extract next neighboring node of `developer`
+print(one_line_about_doc[5].nbor())
+
+# %% Extract all tokens on the left of `developer`
+print([token.text for token in one_line_about_doc[5].lefts])
+
+# %% Extract tokens on the right of `developer`
+print([token.text for token in one_line_about_doc[5].rights])
+
+# %% Print subtree of `developer`
+print(list(one_line_about_doc[5].subtree))
+
+# %% Print flattened subtree of `developer`
+
+def flatten_tree(tree):
+    return "".join([token.text_with_ws for token in list(tree)]).strip()
+
+print(flatten_tree(one_line_about_doc[5].subtree))
+
+# %% Shallow parsing and noun phrase detection
+
+conference_text = (
+    "There is a developer conference happening on 21 July 2019 in London."
+)
+conference_doc = nlp(conference_text)
+
+# Extract noun phrases
+for chunk in conference_doc.noun_chunks:
+    print(chunk)
+
+# %% Verb phrase detection
+
+about_talk_text = (
+    "In this talk, the speaker will introduce the audience to the use"
+    " cases of Natural Language Processing in Fintech, making use of"
+    " interesting examples along the way."
+)
+
+patterns = [{"POS": "AUX"}, {"POS": "VERB"}]
+about_talk_doc = textacy.make_spacy_doc(about_talk_text, lang="en_core_web_sm")
+verb_phrases = textacy.extract.token_matches(about_talk_doc, patterns=patterns)
+
+# Print all verb phrases
+
+for chunk in verb_phrases:
+    print(chunk.text)
+
+# %% Extract noun phrases to explain what nouns are involved
+
+for chunk in about_talk_doc.noun_chunks:
+    print(chunk)
+
+# %% Named-entity recognition
+
+piano_class_text = (
+    "Great Piano Academy is situated"
+    " in Mayfair or the City of London and has"
+    " world-class piano instructors."
+)
+piano_class_doc = nlp(piano_class_text)
+
+for ent in piano_class_doc.ents:
+    print(
+        f"""
+{ent.text = }
+{ent.start_char = }
+{ent.end_char = }
+{ent.label_ = }
+{spacy.explain(ent.label_) = }"""
+    )
+
+displacy.serve(piano_class_doc, style="ent", auto_select_port=True)
+
+# %% Use NER to redact names in document
+
+survey_text = (
+    "Out of 5 people surveyed, James Robert,"
+    " Julie Fuller and Benjamin Brooks like"
+    " apples. Kelly Cox and Matthew Evans"
+    " like oranges."
+)
+
+def replace_person_names(token):
+    if token.ent_iob != 0 and token.ent_type_ == "PERSON":
+        return "[REDACTED] "
+    return token.text_with_ws
+
+def redact_names(nlp_doc):
+    with nlp_doc.retokenize() as retokenizer:
+        for ent in nlp_doc.ents:
+            retokenizer.merge(ent)
+    tokens = map(replace_person_names, nlp_doc)
+    return "".join(tokens)
+
+survey_doc = nlp(survey_text)
+print(redact_names(survey_doc))
